@@ -31,14 +31,16 @@ when something here disagrees with `newrelic help <command>`, the help wins.
 - **Know the target before acting.** Every command runs against the default
   profile's key, region, and account unless told otherwise, and nothing in
   the output says which one that was. Run `newrelic profile list` (it shows
-  the default profile and its account ID, with keys masked) and, when it
+  the default profile and its account ID; keys are masked but their first
+  characters still show, so don't paste the table anywhere) and, when it
   matters, `newrelic nerdgraph query '{ actor { accounts { id name } } }'`
   to see which accounts the key reaches. Do this once per session before the
   first write, and again whenever the user switches environment.
 - **Environment variables silently beat the profile.** `NEW_RELIC_API_KEY`
-  replaces the profile's key and `NEW_RELIC_ACCOUNT_ID` replaces its account.
-  An unexpected `401` or `Access denied.` with a profile that "should work"
-  usually means one of these is set in the shell.
+  replaces the profile's key and `NEW_RELIC_ACCOUNT_ID` its account
+  (`NEW_RELIC_REGION` and `NEW_RELIC_LICENSE_KEY` exist too). An unexpected
+  `401` or `Access denied.` with a profile that "should work" usually
+  means one of these is set in the shell.
 - **Check the exit code before parsing.** Success is exit `0` with the result
   on stdout. Failure is exit `1` with `level=fatal msg="…"` on stderr — and
   some argument errors (e.g. `entity search` with no filter) also print the
@@ -105,16 +107,16 @@ Official sources, all published by New Relic:
 | Any | GitHub releases of `newrelic/newrelic-cli`: tar.gz / zip / deb / rpm / `NewRelicCLIInstaller.msi`, with a checksums file |
 | Windows | Scoop: `scoop bucket add newrelic-cli https://github.com/newrelic/newrelic-cli.git` then `scoop install newrelic-cli` |
 | Windows | The MSI, or the `install.ps1` script from `download.newrelic.com/install/newrelic-cli/scripts/` |
+| Windows | `choco install newrelic-cli` — listed by New Relic, but the package has been seen a release behind |
 | macOS | `brew install newrelic-cli` |
 | Linux / macOS | `curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh \| bash` |
 | Linux | `sudo snap install newrelic-cli` |
 | Container | `newrelic/cli` image |
 
-Community packages are a different matter: the Chocolatey package can trail
-the current release, and a winget package for the CLI exists that is not
-published by New Relic. Prefer the sources above, and say so if the user
-reaches for another one. Confirm with `newrelic version`. Installing is the
-user's decision — show the command rather than running it unasked.
+A winget package for the CLI exists that is not published by New Relic;
+prefer the sources above and say so if the user reaches for it. Confirm with
+`newrelic version`. Installing is the user's decision — show the command
+rather than running it unasked.
 
 Not to be confused with `newrelic install`, which installs New Relic *agents
 and integrations on the current host* (a system-level write).
@@ -138,9 +140,10 @@ every later command depends on, so confirm them like any other write.
 **Headless setup.** `profile add` prompts for every one of `--apiKey`,
 `--region`, `--accountId`, `--licenseKey` that is missing, and a prompt with
 no terminal attached kills the command. In CI or an agent shell, supply all
-four (the license key included) or skip profiles entirely and export
-`NEW_RELIC_API_KEY` and `NEW_RELIC_ACCOUNT_ID`. `profile add` also has
-`-y/--acceptDefaults` to suppress prompts.
+four (the license key included), or set `NEW_RELIC_API_KEY`,
+`NEW_RELIC_ACCOUNT_ID`, and `NEW_RELIC_REGION` from the secret store
+instead of writing a profile. `profile add` also has `-y/--acceptDefaults`
+to suppress prompts.
 
 **Choosing the target per command.**
 
@@ -225,6 +228,9 @@ Things that make this easier everywhere:
 - `--queryFile query.graphql` reads the document from a file. Despite the
   help text calling it a "JSON file", it must contain the plain GraphQL
   document — a `{"query": …}` wrapper is rejected with a syntax error.
+  Write `--variablesFile` JSON without a byte-order mark: Windows PowerShell
+  5.1's `-Encoding UTF8` adds one and the CLI then fails with
+  `invalid character 'ï'`.
 - NRQL identifiers with spaces or dots take backticks (`` `my attr` ``). In
   PowerShell the backtick is the escape character, so such a query must be in
   single quotes.
