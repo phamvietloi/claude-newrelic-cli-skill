@@ -1,0 +1,21 @@
+# Raw help dumps and probe output — may name a real account
+.local/
+
+# Skill-creator eval runs and their outputs
+*-workspace/
+evals/**/outputs/
+benchmark.json
+benchmark.md
+grading.json
+timing.json
+feedback.json
+
+# Agent reports, session state, local tool config
+plans/
+.remember/
+.claude/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp

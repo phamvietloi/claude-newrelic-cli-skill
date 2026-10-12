@@ -1,0 +1,16 @@
+{
+  "name": "claude-newrelic-cli-skill",
+  "owner": { "name": "phamvietloi", "url": "https://github.com/phamvietloi" },
+  "metadata": {
+    "description": "New Relic command-line skill for Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "newrelic-cli-skill",
+      "source": "./",
+      "description": "One skill: newrelic-cli (NRQL, NerdGraph, entities, APM, deployment markers, custom events).",
+      "license": "MIT",
+      "category": "development"
+    }
+  ]
+}

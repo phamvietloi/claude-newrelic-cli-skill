@@ -1,0 +1,10 @@
+{
+  "name": "newrelic-cli-skill",
+  "version": "1.0.0",
+  "description": "Agent skill for operating New Relic from the terminal with the official newrelic CLI.",
+  "author": { "name": "phamvietloi", "url": "https://github.com/phamvietloi" },
+  "homepage": "https://github.com/phamvietloi/claude-newrelic-cli-skill",
+  "repository": "https://github.com/phamvietloi/claude-newrelic-cli-skill",
+  "license": "MIT",
+  "keywords": ["newrelic", "new-relic", "nrql", "nerdgraph", "observability", "skills"]
+}
