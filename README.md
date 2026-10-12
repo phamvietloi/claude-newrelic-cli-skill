@@ -65,9 +65,13 @@ Start a new Claude Code session; the skill appears in the skill list.
   and output shapes were taken from that version's help text and from
   read-only runs; the CLI changes between releases, so check
   `newrelic help <command>` when something disagrees.
-- Only read-only commands were executed while writing the skill. Everything
-  it says about write commands comes from their help text, not from running
-  them.
+- Write commands were exercised once, on throwaway objects in a single
+  account: custom events, workloads, entity tags, one NerdGraph mutation,
+  the three deployment-marker commands, profile creation, `diagnose
+  validate`, and the JUnit dry run. `synthetics run`, `install`,
+  `diagnose run`, and the `apiAccess`, `usermanagement`,
+  `accessmanagement`, `fleetcontrol`, `nerdstorage`, and `edge` writes were
+  not run; what the skill says about those comes from their help text.
 - The skill has not been benchmarked yet: the evals below exist but no
   with-skill / without-skill comparison has been run.
 

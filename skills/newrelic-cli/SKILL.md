@@ -48,6 +48,12 @@ when something here disagrees with `newrelic help <command>`, the help wins.
   failure.
 - **Empty is not an error.** A search with no match exits `0` and prints
   `null`. See mistake #5 for the shapes.
+- **Writes are quiet, and reads lag behind them.** A successful write logs
+  `level=info msg=success` on stderr and often prints nothing on stdout, so
+  stderr output is not a failure signal — the exit code is. A new tag, a
+  renamed or deleted workload, or a deployment marker can take from seconds
+  to a few minutes to show up in reads; retry the read-back before deciding
+  a write failed, and never repeat the write just because it isn't visible.
 - **Keep keys out of sight.** Never pass `--show-keys` to `profile list`,
   never echo a key into the conversation, and don't run `apiAccess` reads —
   they return key material. In scripts, take keys from environment variables
@@ -100,18 +106,13 @@ There is no region flag: region belongs to the profile.
 
 ## Install
 
-Official sources, all published by New Relic:
-
-| Platform | Command or asset |
-|----------|------------------|
-| Any | GitHub releases of `newrelic/newrelic-cli`: tar.gz / zip / deb / rpm / `NewRelicCLIInstaller.msi`, with a checksums file |
-| Windows | Scoop: `scoop bucket add newrelic-cli https://github.com/newrelic/newrelic-cli.git` then `scoop install newrelic-cli` |
-| Windows | The MSI, or the `install.ps1` script from `download.newrelic.com/install/newrelic-cli/scripts/` |
-| Windows | `choco install newrelic-cli` — listed by New Relic, but the package has been seen a release behind |
-| macOS | `brew install newrelic-cli` |
-| Linux / macOS | `curl -Ls https://download.newrelic.com/install/newrelic-cli/scripts/install.sh \| bash` |
-| Linux | `sudo snap install newrelic-cli` |
-| Container | `newrelic/cli` image |
+Official sources, all published by New Relic: the GitHub releases of
+`newrelic/newrelic-cli` (archives, deb/rpm, MSI, checksums), Scoop and
+Chocolatey on Windows, Homebrew on macOS, Snap on Linux, the `install.sh` /
+`install.ps1` scripts on `download.newrelic.com`, and the `newrelic/cli`
+container image. The exact commands are in
+[references/install-and-profiles.md](references/install-and-profiles.md) —
+read it when the CLI is missing or needs upgrading.
 
 A winget package for the CLI exists that is not published by New Relic;
 prefer the sources above and say so if the user reaches for it. Confirm with
@@ -137,13 +138,21 @@ The profile name is given with the global `--profile` flag; there is no
 `--name`. `add`, `default`, and `delete` change local configuration that
 every later command depends on, so confirm them like any other write.
 
-**Headless setup.** `profile add` prompts for every one of `--apiKey`,
-`--region`, `--accountId`, `--licenseKey` that is missing, and a prompt with
-no terminal attached kills the command. In CI or an agent shell, supply all
-four (the license key included), or set `NEW_RELIC_API_KEY`,
-`NEW_RELIC_ACCOUNT_ID`, and `NEW_RELIC_REGION` from the secret store
-instead of writing a profile. `profile add` also has `-y/--acceptDefaults`
-to suppress prompts.
+**Headless setup.** With all four of `--apiKey`, `--region`, `--accountId`,
+`--licenseKey` given, `profile add` asks nothing. With one missing it
+prompts, and with no terminal attached the prompt kills the command (exit
+`1`) *after* the profile has been written — a half-configured profile is
+left behind. `-y/--acceptDefaults` suppresses the prompts and exits `0`, but
+it just leaves the missing value empty, so look at `profile list`
+afterwards. `add` does not validate the key, overwrites a profile of the
+same name without asking, and leaves the default profile as it was.
+
+Profiles are optional: with `NEW_RELIC_API_KEY` (plus
+`NEW_RELIC_ACCOUNT_ID`, and `NEW_RELIC_REGION` outside the US) set from a
+secret store, the CLI authenticates from the environment alone. The
+case-by-case behaviour and the error messages each misconfiguration
+produces are in
+[references/install-and-profiles.md](references/install-and-profiles.md).
 
 **Choosing the target per command.**
 
@@ -151,7 +160,8 @@ to suppress prompts.
   account answers `Access denied.` — that is an account problem, not a key
   problem.
 - Different key or region: `--profile <name>`. Create one profile per
-  region/environment rather than editing one in place.
+  region/environment rather than editing one in place. A region that does
+  not match the key answers `403 … not authorized for account region`.
 - A user key is tied to a user, not to one account: it reaches every account
   that user can see. That is why entity-level commands ignore `-a` (#6).
 
@@ -168,33 +178,26 @@ involved · H = changes this host or the CLI's own config.
 | `entity search --name\|--type\|--domain\|--tags\|--reporting\|--alert-severity` | R | Find entities across every account the key sees |
 | `entity tags get --guid <GUID>` | R | Tags of one entity |
 | `entity tags create\|replace\|delete\|delete-values` | W | Change tags (see #10) |
-| `entity deployment create --guid <GUID> --version <v>` | W | Deployment marker on any entity |
+| `entity deployment create --guid <GUID> --version <v>` | W | Deployment marker on an entity of any type; cannot be deleted from the CLI |
 | `apm application search [--name <n>]` / `get --guid <GUID>` | R | APM application details |
 | `apm deployment list --applicationId <APP_ID>` | R | Deployment markers of one APM app |
-| `apm deployment create\|delete --applicationId <APP_ID>` | W | Legacy APM deployment markers |
-| `changeTracking create --entitySearch … --category … --type …` | W | Change tracking event (deployments, feature flags, anything) |
-| `events post --event '<json>'` / `events postFile --file <f>` | W | Send custom events (needs a license key in the profile) |
+| `apm deployment create\|delete --applicationId <APP_ID>` | W | Legacy APM deployment markers; `delete` takes `--deploymentID <id>` |
+| `changeTracking create --entitySearch … --category … --type …` | W | Change tracking event (deployments, feature flags, anything) on an entity of any type; cannot be deleted from the CLI |
+| `events post --event '<json>'` / `events postFile --file <f>` | W | Send custom events (needs a license key in the profile); `postFile` wants a JSON **array** |
 | `workload list` / `workload get --guid <GUID>` | R | Workloads of an account |
 | `workload create\|update\|duplicate\|delete` | W | Change workloads |
 | `synthetics monitor list\|search --name\|get --monitorId` | R | Synthetic monitors |
 | `synthetics run --guid <GUID>…` / `--batchFile <f>` | W | Starts real monitor runs and waits for the result |
-| `aimonitoring application search` / `aimonitoring events` | R | LLM telemetry reported by APM agents |
-| `diagnose validate` | W | Sends test data to the account to prove connectivity |
+| `diagnose validate` | W | Posts a test event (type `NrIntegrationError`, carrying this machine's hostname) to prove connectivity |
 | `diagnose run` / `diagnose update` | H | Downloads and runs the diagnostics binary |
 | `diagnose lint --config-file <f>` | L | Validate a Java agent config file |
-| `reporting junit --path <f>` | W | Posts test results as events; `--dryRun --output` only prints them |
-| `nerdstorage document\|collection get` | R | Read NerdStorage |
-| `nerdstorage document write\|delete`, `collection delete` | W | Change NerdStorage |
-| `usermanagement …`, `accessmanagement …`, `apiAccess …` | R/W | Users, groups, grants, API keys. `get` reads return personal data or key material |
-| `fleetcontrol …`, `edge trace-observer …` | R/W | Fleet Control and trace observers; `get`/`list`/`search` read, the rest write |
-| `install` | H | Installs agents/integrations on this host |
+| `reporting junit --path <f>` | W | Posts test results as `TestRun` events; `--dryRun --output` prints them and posts nothing |
 | `profile list` / `config list` / `config get --key <k>` | L | Inspect CLI setup |
 | `profile add\|default\|delete`, `config set\|reset` | H | Change CLI setup |
 | `decode entity <GUID> --key <k>` / `decode url` | L | Decode a GUID (prints `accountId\|domain\|type\|id`; `--key` is required) or a New Relic URL |
 | `utils jq '<filter>'` / `utils yq` | L | Bundled jq/yq reading stdin — use when `jq` is not installed |
-| `utils terraform dashboard`, `utils semver check`, `agent config obfuscate`, `agent version <name>` | L | Helpers |
 | `completion --shell <bash\|zsh\|fish\|powershell>`, `documentation`, `version` | L | Shell completion, generated docs, version |
-| `migrate nrqldroprules tf-*` | H | Terraform migration utilities — read their help before use |
+| `aimonitoring`, `nerdstorage`, `usermanagement`, `accessmanagement`, `apiAccess`, `fleetcontrol`, `edge`, `install`, `migrate`, `agent`, `utils terraform\|semver` | R/W/H | Rarely needed groups — verbs, and which of them write, are in [references/other-commands.md](references/other-commands.md) |
 
 ## What the CLI cannot do
 
@@ -243,23 +246,27 @@ Things that make this easier everywhere:
 | 2 | **Lower-casing group names** — `changetracking`, `apiaccess`, `postfile` | Names are case-sensitive: `changeTracking`, `apiAccess`, `events postFile`. The CLI's own help for `entity deployment` points to `changetracking create-event`, which does not exist; the real command is `changeTracking create`. |
 | 3 | **Passing NRQL as a positional argument** | `nrql query` only accepts `--query`/`-q`. Only `nerdgraph query` takes its document positionally. |
 | 4 | **Asking for a format that isn't there** — `--format CSV` | It exits `0` and prints JSON anyway. Formats are `JSON`, `Text`, `YAML`; convert JSON yourself. |
-| 5 | **Assuming search output is always an array** | `entity search` prints `null` for no match, a **bare object** for exactly one match, and an array for several. `apm application search` and `synthetics monitor search` print `null` for no match; `synthetics monitor list` prints `[]`, or nothing at all when `--statusFilter` matches nothing; `workload list` prints `{"query": …, "results": …}`. Normalise before iterating (pattern below). |
+| 5 | **Assuming search output is always an array** | `entity search` prints `null` for no match (`[]` when `--fields-filter` is used), a **bare object** for exactly one match, and an array for several. `apm application search` and `synthetics monitor search` print `null` for no match; `synthetics monitor list` prints `[]`, or nothing at all when `--statusFilter` matches nothing; `workload get` prints an array; `workload list` prints `{"count": …, "query": …, "results": {"entities": […]}}`, shrinking to `"results": {}` with no `count` when there are none. Normalise before iterating (pattern below). |
 | 6 | **Believing `-a` scopes everything** | `nrql query`, `workload list`, and `events post` use the account. `entity search` does not — it returns entities from every account the key can see, even with `-a`. Scope it with `--tags accountId:<ACCOUNT_ID>`, and check the `accountId` of a result before acting on its GUID. |
-| 7 | **Reading `Access denied.` or `401` as "the key is wrong"** | `Access denied.` on `nrql query` means the account ID is wrong or unreachable. A `401` with a working profile usually means `NEW_RELIC_API_KEY` is set in the environment and overriding it. |
-| 8 | **Mixing up the three deployment commands** | `apm deployment create` wants the numeric `--applicationId` and `--revision`; `entity deployment create` wants `--guid` and `--version`; `changeTracking create` wants `--entitySearch`, `--category`, `--type` (and `--version` for deployments). A GUID is not an application ID — both are fields of the `entity search` result (`guid`, `applicationId`). |
-| 9 | **Treating `nerdgraph query` as read-only because of its name** | The same subcommand sends whatever document it is given. If the document starts with `mutation`, it is a write and needs the approval in `## Safety`. |
-| 10 | **Using the wrong tag verb** | `tags create` adds, `tags replace` **overwrites the whole tag set** with what you pass, `tags delete --tag <key>` removes a key with all its values, `tags delete-values --value <key>:<value>` removes one value (its help example shows `--tag`; the flag is `--value`). Run `tags get` first and show the user the before/after. |
-| 11 | **Running `diagnose validate` as a harmless health check** | It posts test data into the account. To check key, region, and reachability without writing, use `newrelic nerdgraph query '{ actor { accounts { id name } } }'`. `diagnose run` downloads and executes a separate binary. |
-| 12 | **Running `profile add` in a script with a flag missing** | It falls back to an interactive prompt and dies without a terminal. Pass all four values or use environment variables (see "Headless setup"). |
+| 7 | **Reading `Access denied.` or `401` as "the key is wrong"** | `Access denied.` on `nrql query` means the account ID is wrong or unreachable. A `401` with a working profile usually means `NEW_RELIC_API_KEY` is set in the environment and overriding it. `403 … not authorized for account region` means the region (profile or `NEW_RELIC_REGION`) does not match the key. |
+| 8 | **Mixing up the three deployment commands** | `apm deployment create` wants the numeric `--applicationId` and `--revision`; `entity deployment create` wants `--guid` and `--version`; `changeTracking create` wants `--entitySearch`, `--category`, `--type` (and `--version` for deployments). A GUID is not an application ID — both are fields of the `entity search` result (`guid`, `applicationId`). Each returns a different ID (`id`, `deploymentId`, `changeTrackingId`) and lands in a different place (see "Deployment marker" below); only the APM one has a `delete`. |
+| 9 | **Treating `nerdgraph query` as read-only because of its name** | The same subcommand sends whatever document it is given, and `-a` does not gate it. If the document starts with `mutation`, it is a write and needs the approval in `## Safety`. A successful mutation can print just `{}` — read the entity back instead of trusting the output. |
+| 10 | **Using the wrong tag verb** | `tags create` adds (on an existing key it adds another value), `tags replace` **removes every tag you could have set** and leaves only what you pass (system tags such as `account` and `accountId` survive), `tags delete --tag <key>` removes a key with all its values, `tags delete-values --value <key>:<value>` removes one value (its help example shows `--tag`, which fails with `unknown flag`). Run `tags get` first and show the user the before/after. |
+| 11 | **Running `diagnose validate` as a harmless health check** | It posts a test event into the account, with the machine's hostname in it. To check key, region, and reachability without writing, use `newrelic nerdgraph query '{ actor { accounts { id name } } }'`. `diagnose run` downloads and executes a separate binary. |
+| 12 | **Running `profile add` in a script with a flag missing** | It prompts, dies without a terminal, and has already written an incomplete profile by then. `-y` avoids the prompt but leaves the value empty and still exits `0`. Pass all four values or use environment variables (see "Headless setup"). |
 | 13 | **Quoting GraphQL for the wrong PowerShell** | Works in PowerShell 7, fails in Windows PowerShell 5.1 with `command expects only 1 argument`. Use `\"`, `--variablesFile`, or `--queryFile` (see "Shell quoting"). |
 | 14 | **Parsing stdout after a failure** | Some argument errors print the usage text to stdout and the reason to stderr. Gate on the exit code first. |
 | 15 | **Assuming flat NRQL results** | Keys follow the function: `average(duration)` → `"average.duration"`, `percentile(duration, 95)` → `"percentile.duration": {"95": …}`, `FACET x` adds both `"x"` and `"facet"`, `TIMESERIES` adds `beginTimeSeconds`/`endTimeSeconds` (epoch seconds). Alias with `AS` to get keys you control. |
+| 16 | **Giving `events postFile` a single JSON object** | The file must be a JSON array. With a bare object the CLI logs `json file must be composed of an array of event data`, then logs `success` and exits `0` — and nothing is posted. Wrap the event in `[ ]` and confirm with an NRQL read-back. |
+| 17 | **Declaring a write failed (or re-running it) because the read-back is empty** | Reads lag: tag changes took 10–30 seconds to show, a workload rename about as long, a deployment in `deploymentSearch` several minutes. Poll the read with a timeout; a second `create` makes a duplicate. |
 
 ## Safety — writes go to a real account
 
-New Relic has no dry-run and most writes cannot be recalled: a posted event
-stays until retention expires, a deployment marker appears on everyone's
-charts, a tag change can reroute alerts and dashboards that filter on it.
+Write commands have no dry-run (`reporting junit --dryRun` is the one
+exception) and most writes cannot be recalled: a posted event stays until
+retention expires, a deployment marker appears on everyone's charts and has
+no delete command outside legacy APM, a tag change can reroute alerts and
+dashboards that filter on it.
 The same binary, with the same default profile, may point at production.
 
 Before any command marked W or H above:
@@ -273,7 +280,8 @@ Before any command marked W or H above:
    and get the user's explicit approval. Approval for one entity or account
    does not carry over to the next.
 3. **Read back** after the write (`tags get`, `apm deployment list`, an NRQL
-   query for the event) and report what actually changed.
+   query for the event) and report what actually changed — allowing for the
+   lag described in #17.
 
 Deserving extra care:
 
@@ -295,9 +303,11 @@ Deserving extra care:
   list, not just the first item.
 
 Safe to run freely: everything marked R or L, with two caveats — don't run
-`profile list --show-keys`, and reads under `usermanagement`,
-`accessmanagement`, and `apiAccess` return names, emails, or key material
-that should not be pasted into chats, tickets, or files.
+`profile list --show-keys`, and some output carries personal data or
+secrets that should not be pasted into chats, tickets, or files: reads
+under `usermanagement`, `accessmanagement`, and `apiAccess`, and also
+`workload` output and entity tags, which include the creator's name and
+email.
 
 ## Common Patterns
 
@@ -385,19 +395,28 @@ newrelic entity deployment create --guid <GUID> --version "1.4.2" --commit "<SHA
 
 # Legacy APM marker by numeric application ID
 newrelic apm deployment create --applicationId <APP_ID> --revision "1.4.2" --user "ci-bot"
-newrelic apm deployment list --applicationId <APP_ID>               # R: read back
+newrelic apm deployment list --applicationId <APP_ID>               # R: read back, immediate
+newrelic apm deployment delete --applicationId <APP_ID> --deploymentID <ID>
+
+# Read back (R): changeTracking writes ChangeTrackingEvent; the other two write Deployment
+newrelic nrql query --query "SELECT * FROM ChangeTrackingEvent WHERE version = '1.4.2' SINCE 30 minutes ago"
+newrelic nrql query --query "SELECT * FROM Deployment WHERE version = '1.4.2' SINCE 30 minutes ago"
 ```
 Target by GUID (`id = '<GUID>'`) rather than by name when you can: a name
 search can match the same service in another account or environment.
+Deleting an APM marker removes it from `apm deployment list`; its
+`Deployment` event stays queryable.
 
-**Custom events** (W — needs a license key in the profile and an account):
+**Custom events** (W — needs a license key in the profile; goes to the
+profile's account unless `-a` says otherwise):
 ```bash
-newrelic events post -a <ACCOUNT_ID> --event '{"eventType": "Payment", "amount": 123.45}'
-newrelic events postFile -a <ACCOUNT_ID> --file events.json
-newrelic nrql query -a <ACCOUNT_ID> --query "SELECT * FROM Payment SINCE 10 minutes ago"   # read back; ingest takes a moment
+newrelic events post --event '{"eventType": "Payment", "amount": 123.45}'
+newrelic events postFile --file events.json                         # a JSON array of events (#16)
+newrelic nrql query --query "SELECT * FROM Payment SINCE 10 minutes ago"   # read back; ingest takes a moment
 ```
-`eventType` is required in every event. In Windows PowerShell 5.1 the JSON's
-double quotes need `\"` — or use `postFile`.
+`eventType` is required in every event. A rejected license key answers
+`403 response returned`. In Windows PowerShell 5.1 the JSON's double quotes
+need `\"` — or use `postFile`.
 
 **Workloads and synthetics** (reads):
 ```bash

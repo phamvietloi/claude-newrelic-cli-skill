@@ -49,15 +49,16 @@ explanation as a written answer.
 skills/
   newrelic-cli/
     SKILL.md
+    references/        # install-and-profiles.md, other-commands.md
     evals/evals.json
 .claude-plugin/   # plugin.json + marketplace.json: the repo root is one plugin
 .local/      # gitignored: help dumps (`dump-help.ps1`), probe scripts and raw output
 plans/       # gitignored: agent reports
 ```
 
-Add a `references/` folder inside the skill only if `SKILL.md` would exceed
-about 400 lines; keep `SKILL.md` under 500. Frontmatter is `name`,
-`description`, and `license` only.
+Keep `SKILL.md` under 500 lines; when it passes about 430, move the
+least-used detail into `references/` and link it from `SKILL.md`.
+Frontmatter is `name`, `description`, and `license` only.
 
 ## Editing the skill
 
