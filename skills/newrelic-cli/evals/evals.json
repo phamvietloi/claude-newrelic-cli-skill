@@ -1,0 +1,55 @@
+{
+  "skill_name": "newrelic-cli",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Our release job runs on a self-hosted Windows runner, and the step shell is Windows PowerShell 5.1 (not pwsh). After a successful deploy I want the job to record a deployment marker in New Relic for our service `checkout-api` using the newrelic CLI: version comes from $env:RELEASE_VERSION, commit from $env:GIT_SHA. The same user API key can see both our staging and our production account, and `checkout-api` exists in both. The runner has no New Relic profile configured yet. Don't run anything against New Relic — write me the exact step (commands as they should appear in the job) and explain the choices, including how the CLI gets its credentials and how we make sure the marker lands on the production service only.",
+      "expected_output": "A written answer with a PowerShell 5.1-safe job step that authenticates without an interactive prompt, resolves the production entity unambiguously, and records the marker with a command that exists in the CLI, plus an explanation of each choice.",
+      "files": [],
+      "expectations": [
+        "The marker command is one that exists in the CLI with its real flags: `newrelic changeTracking create` (with --entitySearch, --category, --type, --version), or `newrelic entity deployment create --guid ... --version ...`, or `newrelic apm deployment create --applicationId ... --revision ...` — not an invented command or flag",
+        "If `changeTracking` is used it is spelled with a capital T (not `changetracking`), and no `create-event` subcommand is used",
+        "The answer does not treat the entity GUID and the numeric APM application ID as interchangeable: --guid/--entitySearch get a GUID or search expression, --applicationId gets the numeric ID",
+        "The production service is targeted unambiguously — by a fixed GUID, or by a search narrowed with the account (e.g. `accountId` tag / `tags.accountId` condition) — and the answer says a bare name match could hit the staging entity too",
+        "The answer does not rely on `-a/--accountId` alone to restrict `entity search` to production",
+        "Credentials are supplied non-interactively: environment variables such as NEW_RELIC_API_KEY (and NEW_RELIC_ACCOUNT_ID) from CI secrets, or `newrelic profile add` with every value given as a flag — and the answer notes that `profile add` prompts and fails when a value is missing in a non-interactive shell",
+        "No API key or license key literal appears in the commands, and the answer does not suggest `profile list --show-keys` or echoing the key",
+        "Quoting is valid for Windows PowerShell 5.1: any embedded double quotes passed to newrelic.exe are escaped (\\\") or avoided, and NRQL-style single-quoted literals inside --entitySearch sit inside a double-quoted string",
+        "The answer states that recording the marker is a write to the real account and includes a read-back or verification step (or says how to verify)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I'm on call and one of our NRQL alert conditions is paging me every few minutes. From my terminal (bash, newrelic CLI already set up with a working profile) I want to: 1) list the alert policies and the NRQL conditions in our main account so I can find the noisy one, and 2) disable that one condition until morning. Please don't execute anything — give me the exact commands for both steps, tell me what each one does, and tell me anything I should check before running step 2.",
+      "expected_output": "A written answer that lists policies and NRQL conditions through NerdGraph (not a nonexistent alerts command), gives a NerdGraph mutation for disabling one condition, and clearly separates the read from the write with a target check before the write.",
+      "files": [],
+      "expectations": [
+        "The answer does not use `newrelic alerts ...` commands (the CLI has no `alerts` command tree), or explicitly states that such commands do not exist",
+        "Step 1 uses `newrelic nerdgraph query` with a GraphQL query under `actor { account(id: ...) { alerts { ... } } }` that returns policies and NRQL conditions (e.g. policiesSearch and nrqlConditionsSearch)",
+        "The account ID is passed inside the GraphQL request (inline or via --variables), not only through `-a/--accountId`",
+        "Step 2 is a GraphQL `mutation` sent through `newrelic nerdgraph query`, and the answer says explicitly that this is a write even though the subcommand is called `query`",
+        "The GraphQL documents are quoted so bash does not expand `$variables` (single-quoted document, values via --variables or inline)",
+        "Before step 2 the answer tells the user to confirm which profile/account the CLI is pointed at (e.g. `newrelic profile list` or an `actor { accounts { id name } }` query) and to confirm the condition's id/name/policy from step 1",
+        "The answer includes how to re-enable the condition later or how to verify the change by reading the condition back",
+        "The answer does not claim the CLI has a dry-run mode for the mutation"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Write me a PowerShell 7 script `nr-app-check.ps1` that takes an application name and uses the newrelic CLI to: find that APM application in New Relic, print its error rate and p95 response time for the last 30 minutes, and make sure it has the tag `owner:platform` (add it only if it's missing — it must not lose any tags it already has). We have several accounts under one key and app names with spaces like `Billing API`. I can't let you run this against our account, so just write the script and walk me through why it's written the way it is. I plan to run it from cron-like automation, so it should fail loudly instead of doing the wrong thing.",
+      "expected_output": "A PowerShell 7 script plus explanation that handles zero/one/many search results, extracts NRQL values correctly, adds the tag without overwriting others, and stops on errors or ambiguity.",
+      "files": [],
+      "expectations": [
+        "The script handles all three `entity search` (or `apm application search`) outcomes: no match (`null`), exactly one match (a single object, not an array), and several matches — and stops with an error unless exactly one application matches",
+        "The script does not assume `-a/--accountId` restricts `entity search`; if it restricts by account it filters on the `accountId` tag or on the result's accountId field",
+        "The NRQL is passed with `--query` (not as a positional argument) and the app name is embedded as a single-quoted NRQL literal inside a double-quoted PowerShell string (or equivalent correct quoting) so names with spaces work",
+        "The p95 value is read from the nested percentile object (e.g. `.'percentile.duration'.'95'` or an aliased key's `.'95'`), not treated as a flat number",
+        "The tag is added with `newrelic entity tags create --guid <guid> --tag owner:platform`, and `entity tags replace` is not used to add it",
+        "Existing tags are read first with `newrelic entity tags get --guid <guid>` and the create is skipped when `owner` already has the value `platform`",
+        "The script checks `$LASTEXITCODE` (or equivalent) after newrelic calls before parsing their output",
+        "The explanation flags the tag change as a write to a real account and addresses confirming the target (profile/account) before it runs unattended",
+        "The script does not use `--format CSV` or parse `--format Text` output"
+      ]
+    }
+  ]
+}
