@@ -144,8 +144,8 @@ prompts, and with no terminal attached the prompt kills the command (exit
 `1`) *after* the profile has been written — a half-configured profile is
 left behind. `-y/--acceptDefaults` suppresses the prompts and exits `0`, but
 it just leaves the missing value empty, so look at `profile list`
-afterwards. `add` does not validate the key, overwrites a profile of the
-same name without asking, and leaves the default profile as it was.
+afterwards. `add` does not validate the key, updates an existing profile
+of the same name without asking, and leaves the default profile as it was.
 
 Profiles are optional: with `NEW_RELIC_API_KEY` (plus
 `NEW_RELIC_ACCOUNT_ID`, and `NEW_RELIC_REGION` outside the US) set from a

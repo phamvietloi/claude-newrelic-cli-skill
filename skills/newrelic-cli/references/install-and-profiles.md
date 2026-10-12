@@ -40,7 +40,8 @@ Other things to know:
 
 - `add` does not check the key. A wrong key is only discovered on first use
   (`401`).
-- Adding a profile whose name already exists overwrites it without asking.
+- Re-adding a name that already exists updates that profile in place with
+  no confirmation; values you omit default to what is stored.
 - Adding a profile does not change the default profile when one exists.
 - When a value is missing, `add` first tries to work it out through the API.
   With a key the API rejects, each such run took about five minutes before
